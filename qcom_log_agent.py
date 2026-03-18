@@ -179,12 +179,25 @@ def build_data_summary(result: AnalysisResult) -> str:
         for evt_name, count in sorted(counts.items(), key=lambda x: -x[1]):
             lines.append(f"- {evt_name}: {count}")
 
+        # Unique PCIs / EARFCNs from RRC events
+        rrc_pcis = sorted(set(e.pci for e in rrc if e.pci is not None))
+        rrc_earfcns = sorted(set(e.earfcn for e in rrc if e.earfcn is not None))
+        if rrc_pcis:
+            lines.append(f"- Unique PCIs (from RRC): {rrc_pcis}")
+        if rrc_earfcns:
+            lines.append(f"- Unique EARFCNs (from RRC): {rrc_earfcns}")
+
         # Last 20 events
         recent = sorted(rrc, key=lambda x: x.timestamp)[-20:]
         lines.append(f"\nLast {len(recent)} RRC events:")
         for e in recent:
             ts = e.timestamp.strftime("%H:%M:%S.%f")[:-3]
-            lines.append(f"  [{ts}] {e.tech} {e.direction} {e.event}")
+            extra = ""
+            if e.pci is not None:
+                extra += f" PCI={e.pci}"
+            if e.earfcn is not None:
+                extra += f" EARFCN={e.earfcn}"
+            lines.append(f"  [{ts}] {e.tech} {e.direction} {e.event}{extra}")
         sections.append("\n".join(lines))
 
     # --- NAS Events ---

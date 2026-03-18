@@ -36,8 +36,10 @@ LOG_LTE_NAS_ESM_OTA = 0xB0E3      # NAS ESM OTA (Session Management)
 LOG_LTE_MAC_DL_TB = 0xB063
 LOG_LTE_MAC_UL_TB = 0xB064
 LOG_LTE_MAC_RACH = 0xB061
+LOG_LTE_RRC_STATE = 0xB0C2
 LOG_LTE_PDCP_DL_STATS = 0xB0A0
 LOG_LTE_PDCP_UL_STATS = 0xB0A1
+LOG_LTE_RRC_SERV_CELL_INFO = 0xB0ED
 
 # 5G NR log codes
 LOG_NR_ML1_MEAS_DB = 0xB8D2
@@ -64,6 +66,7 @@ ISF_HEADER_MAGIC = b"\x01\x00"
 LOG_CODE_NAMES = {
     LOG_LTE_ML1_SERV_CELL_MEAS: "LTE ML1 Serving Cell Meas",
     LOG_LTE_RRC_OTA: "LTE RRC OTA",
+    LOG_LTE_RRC_STATE: "LTE RRC State",
     LOG_LTE_NAS_EMM_OTA: "LTE NAS EMM OTA",
     LOG_LTE_NAS_EMM_STATE: "LTE NAS EMM State",
     LOG_LTE_NAS_EMM_SEC_OTA: "LTE NAS EMM OTA (Sec Protected)",
@@ -73,6 +76,7 @@ LOG_CODE_NAMES = {
     LOG_LTE_MAC_RACH: "LTE MAC RACH Attempt",
     LOG_LTE_PDCP_DL_STATS: "LTE PDCP DL Stats",
     LOG_LTE_PDCP_UL_STATS: "LTE PDCP UL Stats",
+    LOG_LTE_RRC_SERV_CELL_INFO: "LTE RRC Serving Cell Info",
     LOG_NR_ML1_MEAS_DB: "NR ML1 Meas Database",
     LOG_NR_RRC_OTA: "NR RRC OTA",
     LOG_NR_RRC_STATE: "NR RRC State",
@@ -182,6 +186,15 @@ LTE_RRC_MSG_TYPES = {
     19: "ULInformationTransfer",
     20: "MeasurementReport",
     21: "Paging",
+    22: "CounterCheck",
+    23: "CounterCheckResponse",
+    24: "UEInformationRequest",
+    25: "UEInformationResponse",
+    26: "ProximityIndication",
+    27: "RNReconfiguration",
+    28: "RNReconfigurationComplete",
+    29: "MBMSCountingRequest",
+    30: "MBMSCountingResponse",
 }
 
 NR_RRC_MSG_TYPES = {
@@ -204,6 +217,12 @@ NR_RRC_MSG_TYPES = {
     16: "RRCReject",
     17: "RRCResume",
     18: "RRCResumeRequest",
+    19: "RRCResumeComplete",
+    20: "RRCSystemInfoRequest",
+    21: "UEAssistanceInformation",
+    22: "FailureInformation",
+    23: "ULDedicatedMessageSegment",
+    24: "DedicatedSIBRequest",
 }
 
 NAS_EMM_MSG_TYPES = {
@@ -285,6 +304,9 @@ class RRCEvent:
     event: str  # e.g. "RRCConnectionSetup", "RRCRelease"
     direction: str = ""  # "UL" or "DL"
     details: str = ""
+    pci: Optional[int] = None
+    earfcn: Optional[int] = None  # EARFCN or NR-ARFCN
+    sfn: Optional[int] = None  # System Frame Number
 
 
 @dataclass
@@ -724,6 +746,10 @@ class LTEAnalyzer:
             self._decode_nas_emm_sec_ota(pkt, result)
         elif code == LOG_LTE_NAS_ESM_OTA:
             self._decode_nas_esm_ota(pkt, result)
+        elif code == LOG_LTE_RRC_STATE:
+            self._decode_rrc_state(pkt, result)
+        elif code == LOG_LTE_RRC_SERV_CELL_INFO:
+            self._decode_rrc_serv_cell_info(pkt, result)
         elif code == LOG_LTE_MAC_DL_TB:
             self._decode_mac_tb(pkt, result, "DL")
         elif code == LOG_LTE_MAC_UL_TB:
@@ -945,6 +971,17 @@ class LTEAnalyzer:
         except struct.error:
             result.parse_errors += 1
 
+    # LTE RRC channel type mapping: id -> (channel_name, direction)
+    LTE_RRC_CHAN_MAP = {
+        0: ("BCCH-BCH", "DL"),
+        1: ("BCCH-DL-SCH", "DL"),
+        2: ("CCCH-DL", "DL"),
+        3: ("CCCH-UL", "UL"),
+        4: ("DCCH-DL", "DL"),
+        5: ("DCCH-UL", "UL"),
+        6: ("PCCH", "DL"),
+    }
+
     def _decode_rrc_ota(self, pkt: DiagPacket, result: AnalysisResult) -> None:
         """
         Decode 0xB0E0 LTE RRC OTA packet.
@@ -966,12 +1003,21 @@ class LTEAnalyzer:
 
         try:
             version = payload[0]
-            # Direction: typically encoded in channel type byte
-            chan_type = payload[8] if len(payload) > 8 else 0
 
-            # Channel type encodes both channel and direction
-            # Common: BCCH=0, PCCH=1, CCCH_DL=2, CCCH_UL=3, DCCH_DL=4, DCCH_UL=5
-            direction = "DL" if (chan_type % 2 == 0) else "UL"
+            # Extract PCI, EARFCN, SFN from header
+            pci = struct.unpack_from("<H", payload, 3)[0] if len(payload) > 4 else None
+            earfcn = struct.unpack_from("<H", payload, 4)[0] if len(payload) > 5 else None
+            sfn_raw = struct.unpack_from("<H", payload, 6)[0] if len(payload) > 7 else None
+            sfn = (sfn_raw & 0x03FF) if sfn_raw is not None else None  # lower 10 bits
+
+            # Channel type with lookup dict for direction
+            chan_type = payload[8] if len(payload) > 8 else 0
+            chan_info = self.LTE_RRC_CHAN_MAP.get(chan_type)
+            if chan_info:
+                chan_name, direction = chan_info
+            else:
+                chan_name = f"Chan_{chan_type}"
+                direction = "DL" if (chan_type % 2 == 0) else "UL"
 
             # Try to determine the RRC message type from PDU content
             msg_type_id = payload[9] if len(payload) > 9 else -1
@@ -982,7 +1028,10 @@ class LTEAnalyzer:
                 tech="LTE",
                 event=msg_name,
                 direction=direction,
-                details=f"chan_type={chan_type}",
+                details=f"chan={chan_name}",
+                pci=pci,
+                earfcn=earfcn,
+                sfn=sfn,
             )
             result.rrc_events.append(event)
 
@@ -990,7 +1039,9 @@ class LTEAnalyzer:
             self._check_rrc_anomalies(event, result)
 
             if self.verbose:
-                print(f"  [LTE RRC] {direction} {msg_name} (chan={chan_type})")
+                pci_str = f" PCI={pci}" if pci is not None else ""
+                earfcn_str = f" EARFCN={earfcn}" if earfcn is not None else ""
+                print(f"  [LTE RRC] {direction} {msg_name} ({chan_name}{pci_str}{earfcn_str})")
         except (struct.error, IndexError):
             result.parse_errors += 1
 
@@ -1016,6 +1067,42 @@ class LTEAnalyzer:
                     description="LTE RRC Reestablishment Rejected — possible call drop",
                 )
             )
+
+    def _decode_rrc_state(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """Decode 0xB0C2 LTE RRC State."""
+        payload = pkt.payload
+        if len(payload) < 1:
+            return
+        try:
+            rrc_state = payload[0]
+            state_name = LTE_RRC_STATES.get(rrc_state, f"LTE_RRC_State_{rrc_state}")
+            event = RRCEvent(
+                timestamp=pkt.timestamp,
+                tech="LTE",
+                event=f"RRC State: {state_name}",
+                details=f"state_id={rrc_state}",
+            )
+            result.rrc_events.append(event)
+            if self.verbose:
+                print(f"  [LTE RRC State] {state_name}")
+        except (struct.error, IndexError):
+            result.parse_errors += 1
+
+    def _decode_rrc_serv_cell_info(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """Decode 0xB0ED LTE RRC Serving Cell Info (basic — log the event)."""
+        payload = pkt.payload
+        try:
+            event = RRCEvent(
+                timestamp=pkt.timestamp,
+                tech="LTE",
+                event="ServingCellInfo",
+                details=f"payload_len={len(payload)}",
+            )
+            result.rrc_events.append(event)
+            if self.verbose:
+                print(f"  [LTE RRC ServCellInfo] payload={len(payload)} bytes")
+        except (struct.error, IndexError):
+            result.parse_errors += 1
 
     def _decode_nas_emm_ota(self, pkt: DiagPacket, result: AnalysisResult) -> None:
         """
@@ -1454,28 +1541,72 @@ class NR5GAnalyzer:
         except struct.error:
             result.parse_errors += 1
 
+    # NR RRC channel type mapping for v13+ sub-packet format
+    NR_RRC_CHAN_MAP = {
+        0: ("BCCH-BCH", "DL"),
+        1: ("BCCH-DL-SCH", "DL"),
+        2: ("CCCH-DL", "DL"),
+        3: ("CCCH-UL", "UL"),
+        4: ("DCCH-DL", "DL"),
+        5: ("DCCH-UL", "UL"),
+        6: ("PCCH", "DL"),
+    }
+
     def _decode_rrc_ota(self, pkt: DiagPacket, result: AnalysisResult) -> None:
         """
         Decode 0xB887 NR RRC OTA.
-        Similar layout to LTE RRC OTA but with NR-specific fields.
+        Supports legacy (v1-v5) and sub-packet (v13+) formats.
         """
         payload = pkt.payload
-        if len(payload) < 10:
+        if len(payload) < 6:
             return
 
         try:
             version = payload[0]
-            chan_type = payload[4] if len(payload) > 4 else 0
-            direction = "DL" if (chan_type % 2 == 0) else "UL"
-            msg_type_id = payload[5] if len(payload) > 5 else -1
-            msg_name = NR_RRC_MSG_TYPES.get(msg_type_id, f"NR_RRC_{msg_type_id}")
+            pci = None
+            sfn = None
+            chan_name = None
 
+            if version >= 13 and len(payload) >= 18:
+                # v13+ sub-packet format:
+                # [0:4] header, [4:8] sub-packet header
+                # [8] channel_type, [9] direction_byte, [10:12] SFN
+                # [12:14] PCI (uint16 LE)
+                chan_type = payload[8]
+                direction_byte = payload[9]
+                sfn = struct.unpack_from("<H", payload, 10)[0] & 0x03FF
+                pci = struct.unpack_from("<H", payload, 12)[0]
+                chan_info = self.NR_RRC_CHAN_MAP.get(chan_type)
+                if chan_info:
+                    chan_name, direction = chan_info
+                else:
+                    chan_name = f"Chan_{chan_type}"
+                    direction = "UL" if (direction_byte & 1) else "DL"
+                # Infer message type from channel when PDU parsing isn't feasible
+                if chan_type == 0:
+                    msg_name = "MIB"
+                elif chan_type == 1:
+                    msg_name = "SIB1"
+                else:
+                    # Try to read msg_type_id if payload is long enough
+                    msg_type_id = payload[18] if len(payload) > 18 else -1
+                    msg_name = NR_RRC_MSG_TYPES.get(msg_type_id, f"NR_RRC_{msg_type_id}")
+            else:
+                # Legacy v1-v5 format
+                chan_type = payload[4] if len(payload) > 4 else 0
+                direction = "DL" if (chan_type % 2 == 0) else "UL"
+                msg_type_id = payload[5] if len(payload) > 5 else -1
+                msg_name = NR_RRC_MSG_TYPES.get(msg_type_id, f"NR_RRC_{msg_type_id}")
+
+            details = f"chan={chan_name}" if chan_name else f"chan_type={chan_type}"
             event = RRCEvent(
                 timestamp=pkt.timestamp,
                 tech="NR",
                 event=msg_name,
                 direction=direction,
-                details=f"chan_type={chan_type}",
+                details=details,
+                pci=pci,
+                sfn=sfn,
             )
             result.rrc_events.append(event)
 
@@ -1503,7 +1634,9 @@ class NR5GAnalyzer:
                 )
 
             if self.verbose:
-                print(f"  [NR RRC] {direction} {msg_name}")
+                pci_str = f" PCI={pci}" if pci is not None else ""
+                sfn_str = f" SFN={sfn}" if sfn is not None else ""
+                print(f"  [NR RRC] {direction} {msg_name}{pci_str}{sfn_str}")
         except (struct.error, IndexError):
             result.parse_errors += 1
 
@@ -1608,7 +1741,7 @@ class NR5GAnalyzer:
     def _decode_rrc_state(self, pkt: DiagPacket, result: AnalysisResult) -> None:
         """Decode 0xB808 NR RRC State."""
         payload = pkt.payload
-        if len(payload) < 2:
+        if len(payload) < 1:
             return
         try:
             rrc_state = payload[0]
@@ -1617,11 +1750,11 @@ class NR5GAnalyzer:
                 timestamp=pkt.timestamp,
                 tech="NR",
                 event=f"RRC State: {state_name}",
-                details=f"state_id={rrc_state}",
+                details=f"state_id={rrc_state} payload_len={len(payload)}",
             )
             result.rrc_events.append(event)
             if self.verbose:
-                print(f"  [NR RRC State] {state_name}")
+                print(f"  [NR RRC State] {state_name} ({len(payload)} bytes)")
         except (struct.error, IndexError):
             result.parse_errors += 1
 
@@ -2100,13 +2233,26 @@ class ReportGenerator:
         for evt_name, count in sorted(counts.items(), key=lambda x: -x[1]):
             print(f"  {evt_name:50s}: {count:>4d}")
 
+        # Show unique PCIs and EARFCNs seen in RRC events
+        pcis = sorted(set(e.pci for e in events if e.pci is not None))
+        earfcns = sorted(set(e.earfcn for e in events if e.earfcn is not None))
+        if pcis:
+            print(f"  Unique PCIs from RRC: {pcis}")
+        if earfcns:
+            print(f"  Unique EARFCNs from RRC: {earfcns}")
+
         # Show last N events
         recent = sorted(events, key=lambda x: x.timestamp)[-10:]
         if recent:
             print(f"\n  Last {len(recent)} RRC events:")
             for e in recent:
                 ts = e.timestamp.strftime("%H:%M:%S.%f")[:-3]
-                print(f"    [{ts}] {e.tech} {e.direction:2s} {e.event}")
+                extra = ""
+                if e.pci is not None:
+                    extra += f" PCI={e.pci}"
+                if e.earfcn is not None:
+                    extra += f" EARFCN={e.earfcn}"
+                print(f"    [{ts}] {e.tech} {e.direction:2s} {e.event}{extra}")
         print()
 
     def _print_nas_summary(self) -> None:
@@ -2620,6 +2766,8 @@ def main() -> int:
     lte_codes = {
         LOG_LTE_ML1_SERV_CELL_MEAS,
         LOG_LTE_RRC_OTA,
+        LOG_LTE_RRC_STATE,
+        LOG_LTE_RRC_SERV_CELL_INFO,
         LOG_LTE_NAS_EMM_OTA,
         LOG_LTE_NAS_EMM_STATE,
         LOG_LTE_NAS_EMM_SEC_OTA,
