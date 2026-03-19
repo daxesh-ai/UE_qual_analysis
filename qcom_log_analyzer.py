@@ -27,7 +27,7 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 # ---------------------------------------------------------------------------
 
 # LTE log codes
-LOG_LTE_ML1_SERV_CELL_MEAS = 0xB821
+LOG_LTE_ML1_SERV_CELL_MEAS = 0xB193
 LOG_LTE_RRC_OTA = 0xB0E0
 LOG_LTE_NAS_EMM_OTA = 0xB0C1
 LOG_LTE_NAS_EMM_STATE = 0xB0C0
@@ -428,6 +428,8 @@ class DiagPacket:
     def tech(self) -> str:
         if 0xB000 <= self.log_code <= 0xB0FF:
             return "LTE"
+        if 0xB100 <= self.log_code <= 0xB1FF:
+            return "LTE"  # LTE ML1 (Layer 1 measurements)
         if 0xB800 <= self.log_code <= 0xB8FF:
             return "NR"
         if 0xB060 <= self.log_code <= 0xB06F:
@@ -1623,7 +1625,7 @@ class LTEAnalyzer:
     ) -> None:
         """
         Decode 0xB063/0xB064 LTE MAC DL/UL Transport Block.
-        Payload contains TB size information for throughput estimation.
+        Payload contains aggregate TB size across num_samples subframes.
         """
         payload = pkt.payload
         if len(payload) < 8:
@@ -1631,15 +1633,15 @@ class LTEAnalyzer:
 
         try:
             version = payload[0]
-            # Number of samples/subframes
+            # Number of subframes covered by this log packet
             num_samples = payload[1] if len(payload) > 1 else 1
-            # TB size (bytes) — typically at a known offset
-            # Layout varies by version; try common layouts
+            num_samples = max(num_samples, 1)
+
+            # TB size (total bytes across all subframes) at offset 2
             total_bytes = 0
             if len(payload) >= 6:
-                # Try reading TB size as uint32 at offset 2
                 tb_size = struct.unpack_from("<I", payload, 2)[0]
-                if tb_size < 10_000_000:  # sanity: less than 10MB per sample
+                if tb_size < 10_000_000:  # sanity: less than 10MB per packet
                     total_bytes = tb_size
 
             if total_bytes > 0:
@@ -1648,8 +1650,8 @@ class LTEAnalyzer:
                     tech="LTE",
                     direction=direction,
                     bytes_count=total_bytes,
-                    tb_count=max(num_samples, 1),
-                    duration_ms=1.0,  # 1 subframe = 1ms
+                    tb_count=num_samples,
+                    duration_ms=float(num_samples),  # num_samples subframes × 1ms each
                 )
                 result.throughput_samples.append(sample)
         except struct.error:
@@ -1658,16 +1660,10 @@ class LTEAnalyzer:
     def _decode_mac_rach(self, pkt: DiagPacket, result: AnalysisResult) -> None:
         """
         Decode 0xB061 LTE MAC RACH Attempt.
-        Payload layout v1:
-          [0]    version
-          [1]    num_samples
-          [2:4]  reserved
-          Per-attempt record (starting at [4]):
-            [4]    RACH cause
-            [5]    preamble index
-            [6:8]  timing advance (uint16 LE)
-            [8]    RACH result: 0=success, 1=failure, 2=aborted
-            [9]    contention type: 0=contention-based, 1=contention-free
+        Supports multiple payload layouts across log versions:
+          v1-2: fixed layout with record at offset 4
+          v3+:  sub-packet structure with header (version, num_subpkts, reserved,
+                sub_id, sub_ver, sub_size) then per-record data
         """
         payload = pkt.payload
         if len(payload) < 10:
@@ -1675,10 +1671,36 @@ class LTEAnalyzer:
 
         try:
             version = payload[0]
-            preamble = payload[5] if len(payload) > 5 else None
-            timing_advance = struct.unpack_from("<H", payload, 6)[0] if len(payload) > 7 else None
-            rach_result_byte = payload[8] if len(payload) > 8 else 0
-            contention_type = payload[9] if len(payload) > 9 else 0
+            num_samples = payload[1] if len(payload) > 1 else 1
+
+            # Determine record start offset based on version
+            if version <= 2:
+                # v1-2: record starts at offset 4 (after version, num_samples, reserved)
+                record_offset = 4
+            else:
+                # v3+: sub-packet header at offset 2-7
+                # [2] sub_id, [3] sub_ver, [4:6] sub_size, record at offset 6 or 8
+                if len(payload) >= 14:
+                    record_offset = 8  # skip version(1)+num(1)+sub_id(1)+sub_ver(1)+sub_size(2)+pad(2)
+                else:
+                    record_offset = 4  # fallback
+
+            if record_offset + 6 > len(payload):
+                return
+
+            preamble = payload[record_offset + 1] if record_offset + 1 < len(payload) else None
+            timing_advance = None
+            if record_offset + 4 <= len(payload):
+                timing_advance = struct.unpack_from("<H", payload, record_offset + 2)[0]
+
+            rach_result_byte = payload[record_offset + 4] if record_offset + 4 < len(payload) else 255
+            contention_type = payload[record_offset + 5] if record_offset + 5 < len(payload) else 0
+
+            # Validate result byte — if out of range, try scanning for it
+            if rach_result_byte > 2:
+                rach_result_byte, contention_type, preamble, timing_advance = (
+                    self._scan_rach_fields(payload)
+                )
 
             rach_results = {0: "Success", 1: "Failure", 2: "Aborted"}
             rach_result = rach_results.get(rach_result_byte, f"Unknown({rach_result_byte})")
@@ -1713,9 +1735,30 @@ class LTEAnalyzer:
                 )
 
             if self.verbose:
-                print(f"  [LTE RACH] {event_name} {', '.join(details_parts)}")
+                print(f"  [LTE RACH v{version}] {event_name} {', '.join(details_parts)}")
         except (struct.error, IndexError):
             result.parse_errors += 1
+
+    @staticmethod
+    def _scan_rach_fields(payload: bytes) -> Tuple[int, int, Optional[int], Optional[int]]:
+        """
+        Fallback scanner: find RACH result (0-2) and preamble (0-63) in payload.
+        Returns (result_byte, contention_type, preamble, timing_advance).
+        """
+        # Scan for a byte sequence: preamble(0-63), TA(2 bytes), result(0-2), contention(0-1)
+        for off in range(2, min(len(payload) - 5, 32)):
+            preamble_candidate = payload[off]
+            result_candidate = payload[off + 3] if off + 3 < len(payload) else 255
+            contention_candidate = payload[off + 4] if off + 4 < len(payload) else 255
+
+            if (0 <= preamble_candidate <= 63
+                    and result_candidate <= 2
+                    and contention_candidate <= 1):
+                ta = struct.unpack_from("<H", payload, off + 1)[0] if off + 3 <= len(payload) else None
+                return result_candidate, contention_candidate, preamble_candidate, ta
+
+        # Couldn't find a valid pattern — return unknown
+        return 255, 0, None, None
 
 
 # ---------------------------------------------------------------------------
@@ -2146,7 +2189,9 @@ class NR5GAnalyzer:
 
         try:
             version = payload[0]
-            # TB bytes typically at offset 4 as uint32
+            num_slots = payload[1] if len(payload) > 1 else 1
+            num_slots = max(num_slots, 1)
+
             if len(payload) >= 8:
                 tb_bytes = struct.unpack_from("<I", payload, 4)[0]
                 if 0 < tb_bytes < 100_000_000:
@@ -2155,8 +2200,8 @@ class NR5GAnalyzer:
                         tech="NR",
                         direction="DL",
                         bytes_count=tb_bytes,
-                        tb_count=1,
-                        duration_ms=0.5,  # NR slot can be 0.5ms
+                        tb_count=num_slots,
+                        duration_ms=num_slots * 0.5,  # NR slot = 0.5ms
                     )
                     result.throughput_samples.append(sample)
         except struct.error:
@@ -2169,6 +2214,9 @@ class NR5GAnalyzer:
             return
 
         try:
+            num_slots = payload[1] if len(payload) > 1 else 1
+            num_slots = max(num_slots, 1)
+
             if len(payload) >= 8:
                 tb_bytes = struct.unpack_from("<I", payload, 4)[0]
                 if 0 < tb_bytes < 100_000_000:
@@ -2177,8 +2225,8 @@ class NR5GAnalyzer:
                         tech="NR",
                         direction="UL",
                         bytes_count=tb_bytes,
-                        tb_count=1,
-                        duration_ms=0.5,
+                        tb_count=num_slots,
+                        duration_ms=num_slots * 0.5,
                     )
                     result.throughput_samples.append(sample)
         except struct.error:
