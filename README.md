@@ -29,8 +29,10 @@ A Python toolkit for parsing and analyzing Qualcomm diagnostic binary log files 
 
 | File | Description |
 |------|-------------|
-| `qcom_log_analyzer.py` | Core analyzer — parses binary logs and generates reports |
-| `qcom_log_agent.py` | Interactive Q&A agent powered by Claude API |
+| `qcom_log_analyzer.py` | Core analyzer — parses binary logs, UPER RRC decoding, RACH, NAS |
+| `qcom_log_agent.py` | Interactive Q&A agent powered by Claude API (requires API key) |
+| `claude-project/UE_log_analysis/ue_signal_analyzer.py` | Signaling analyzer — timelines, ladders, failures, RF dashboard, built-in agent |
+| `claude-project/UE_log_analysis/apple_log_parser.py` | Apple sysdiagnose parser for iOS cellular logs |
 
 ## Usage
 
