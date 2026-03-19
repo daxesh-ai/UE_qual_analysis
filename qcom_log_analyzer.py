@@ -225,6 +225,157 @@ NR_RRC_MSG_TYPES = {
     24: "DedicatedSIBRequest",
 }
 
+# ---------------------------------------------------------------------------
+# UPER (ASN.1 Unaligned PER) message-type lookup tables
+# These map the c1 CHOICE index in the first PDU byte to message names,
+# keyed by channel type ID.  Format: channel_type -> (num_c1_bits, [msg_names])
+# ---------------------------------------------------------------------------
+
+_LTE_UPER_CHANNEL_C1 = {
+    # BCCH-BCH (chan 0): single message, no c1 bits needed
+    0: (0, ["MasterInformationBlock"]),
+    # BCCH-DL-SCH (chan 1): c1 = 2 bits (4 choices)
+    1: (2, ["SystemInformation", "SystemInformationBlockType1", None, None]),
+    # CCCH-DL (chan 2): c1 = 2 bits
+    2: (2, ["RRCConnectionReestablishment", "RRCConnectionReestablishmentReject",
+            "RRCConnectionSetup", None]),
+    # CCCH-UL (chan 3): c1 = 1 bit
+    3: (1, ["RRCConnectionReestablishmentRequest", "RRCConnectionRequest"]),
+    # DCCH-DL (chan 4): c1 = 4 bits (16 choices)
+    4: (4, [
+        "CSFBParametersResponseCDMA2000", "DLInformationTransfer",
+        "HandoverFromEUTRAPreparationRequest", "MobilityFromEUTRACommand",
+        "RRCConnectionReconfiguration", "RRCConnectionRelease",
+        "SecurityModeCommand", "UECapabilityEnquiry",
+        "CounterCheck", "UEInformationRequest",
+        "LoggedMeasurementConfiguration", "RNReconfiguration",
+        None, None, None, None,
+    ]),
+    # DCCH-UL (chan 5): c1 = 4 bits (16 choices)
+    5: (4, [
+        "CSFBParametersRequestCDMA2000", "MeasurementReport",
+        "RRCConnectionReconfigurationComplete", "RRCConnectionReestablishmentComplete",
+        "RRCConnectionSetupComplete", "SecurityModeComplete",
+        "SecurityModeFailure", "UECapabilityInformation",
+        "ULHandoverPreparationTransfer", "ULInformationTransfer",
+        "CounterCheckResponse", "UEInformationResponse",
+        "ProximityIndication", "RNReconfigurationComplete",
+        None, None,
+    ]),
+    # PCCH (chan 6): c1 = 1 bit
+    6: (1, ["Paging", None]),
+}
+
+_NR_UPER_CHANNEL_C1 = {
+    # BCCH-BCH (chan 0): single message
+    0: (0, ["MIB"]),
+    # BCCH-DL-SCH (chan 1): c1 = 2 bits
+    1: (2, ["SystemInformation", "SIB1", None, None]),
+    # CCCH-DL (chan 2): c1 = 2 bits (4 choices in NR DL-CCCH)
+    2: (2, ["RRCReject", "RRCSetup", None, None]),
+    # CCCH-UL (chan 3): c1 = 2 bits
+    3: (2, ["RRCSetupRequest", "RRCResumeRequest", "RRCReestablishmentRequest",
+            "RRCSystemInfoRequest"]),
+    # DCCH-DL (chan 4): c1 = 4 bits (16 choices)
+    4: (4, [
+        "RRCReconfiguration", "RRCResume", "RRCRelease",
+        "RRCReestablishment", "SecurityModeCommand",
+        "DLInformationTransfer", "UECapabilityEnquiry",
+        "CounterCheck", "MobilityFromNRCommand",
+        "DLDedicatedMessageSegment", "UEInformationRequest",
+        None, None, None, None, None,
+    ]),
+    # DCCH-UL (chan 5): c1 = 4 bits
+    5: (4, [
+        "MeasurementReport", "RRCReconfigurationComplete",
+        "RRCSetupComplete", "RRCReestablishmentComplete",
+        "RRCResumeComplete", "SecurityModeComplete",
+        "SecurityModeFailure", "ULInformationTransfer",
+        "LocationMeasurementIndication", "UECapabilityInformation",
+        "CounterCheckResponse", "UEAssistanceInformation",
+        "FailureInformation", "ULInformationTransferMRDC",
+        None, None,
+    ]),
+    # PCCH (chan 6): c1 = 1 bit
+    6: (1, ["Paging", None]),
+}
+
+# SIB type maps: CHOICE index inside SystemInformation → SIB name
+_LTE_SIB_TYPES = {
+    0: "SIB2", 1: "SIB3", 2: "SIB4", 3: "SIB5", 4: "SIB6",
+    5: "SIB7", 6: "SIB8", 7: "SIB9", 8: "SIB10", 9: "SIB11",
+    10: "SIB12", 11: "SIB13", 12: "SIB14", 13: "SIB15", 14: "SIB16",
+}
+
+_NR_SIB_TYPES = {
+    0: "SIB2", 1: "SIB3", 2: "SIB4", 3: "SIB5", 4: "SIB6",
+    5: "SIB7", 6: "SIB8", 7: "SIB9", 8: "SIB10", 9: "SIB11",
+    10: "SIB12", 11: "SIB13", 12: "SIB14",
+}
+
+
+def _decode_rrc_msg_from_pdu(pdu: bytes, chan_type: int, tech: str) -> Optional[str]:
+    """
+    Extract message type name from UPER-encoded RRC PDU bytes.
+
+    The first byte of an ASN.1 UPER RRC PDU contains:
+      bit 7 = outer CHOICE (0 = c1, 1 = messageClassExtension)
+      next N bits = c1 index (N depends on channel type)
+
+    For SystemInformation messages, also attempts to identify which SIB
+    from the second byte.
+
+    Returns message name string or None if decoding fails.
+    """
+    if not pdu:
+        return None
+
+    channel_table = _NR_UPER_CHANNEL_C1 if tech == "NR" else _LTE_UPER_CHANNEL_C1
+    sib_table = _NR_SIB_TYPES if tech == "NR" else _LTE_SIB_TYPES
+
+    entry = channel_table.get(chan_type)
+    if entry is None:
+        return None
+
+    num_c1_bits, msg_list = entry
+
+    # Special case: no c1 bits needed (e.g., BCCH-BCH = always MIB)
+    if num_c1_bits == 0:
+        return msg_list[0] if msg_list else None
+
+    first_byte = pdu[0]
+
+    # Bit 7 = outer CHOICE: 0 = c1, 1 = messageClassExtension
+    outer_choice = (first_byte >> 7) & 1
+    if outer_choice != 0:
+        # messageClassExtension — can't decode further
+        return None
+
+    # Extract c1 index from the next N bits (bits 6 down to 6-N+1)
+    shift = 7 - num_c1_bits
+    mask = (1 << num_c1_bits) - 1
+    c1_index = (first_byte >> shift) & mask
+
+    if c1_index >= len(msg_list):
+        return None
+
+    msg_name = msg_list[c1_index]
+    if msg_name is None:
+        return None
+
+    # For SystemInformation, try to identify which SIB
+    if msg_name == "SystemInformation" and len(pdu) >= 2:
+        # The SIB type CHOICE index is typically in the upper bits of byte 2
+        # (after remaining bits from the message header)
+        second_byte = pdu[1]
+        sib_index = (second_byte >> 4) & 0x0F
+        sib_name = sib_table.get(sib_index)
+        if sib_name:
+            msg_name = f"SystemInformation({sib_name})"
+
+    return msg_name
+
+
 NAS_EMM_MSG_TYPES = {
     0x41: "Attach Request",
     0x42: "Attach Accept",
@@ -754,6 +905,8 @@ class LTEAnalyzer:
             self._decode_mac_tb(pkt, result, "DL")
         elif code == LOG_LTE_MAC_UL_TB:
             self._decode_mac_tb(pkt, result, "UL")
+        elif code == LOG_LTE_MAC_RACH:
+            self._decode_mac_rach(pkt, result)
 
     def _decode_ml1_serving_cell(
         self, pkt: DiagPacket, result: AnalysisResult
@@ -985,17 +1138,11 @@ class LTEAnalyzer:
     def _decode_rrc_ota(self, pkt: DiagPacket, result: AnalysisResult) -> None:
         """
         Decode 0xB0E0 LTE RRC OTA packet.
-        Payload layout:
-          [0]    version
-          [1]    RRC release (e.g., 14 for Rel-14)
-          [2]    RB ID
-          [3]    Physical cell ID
-          [4:6]  EARFCN
-          [6:8]  SFN + SubFN
-          [8]    Channel type / direction encoded
-          [9]    Message type or PDU length indicator
-          [10:12] PDU length
-          [12:]  RRC PDU (ASN.1 encoded)
+        Payload layout is version-dependent:
+          v6+:  [0] ver, [1] rel, [2] rb, [3:5] PCI, [5:7] EARFCN,
+                [7:9] SFN, [9] chan_type, [10:12] pdu_len, [12:] PDU
+          v1-5: [0] ver, [1] rel, [2] rb, [3:5] PCI, [4:6] EARFCN,
+                [6:8] SFN, [8] chan_type, [9:11] pdu_len, [11:] PDU
         """
         payload = pkt.payload
         if len(payload) < 10:
@@ -1004,14 +1151,22 @@ class LTEAnalyzer:
         try:
             version = payload[0]
 
-            # Extract PCI, EARFCN, SFN from header
-            pci = struct.unpack_from("<H", payload, 3)[0] if len(payload) > 4 else None
-            earfcn = struct.unpack_from("<H", payload, 4)[0] if len(payload) > 5 else None
-            sfn_raw = struct.unpack_from("<H", payload, 6)[0] if len(payload) > 7 else None
-            sfn = (sfn_raw & 0x03FF) if sfn_raw is not None else None  # lower 10 bits
+            # Version-dependent header offsets
+            if version >= 6:
+                pci = struct.unpack_from("<H", payload, 3)[0] if len(payload) > 4 else None
+                earfcn = struct.unpack_from("<H", payload, 5)[0] if len(payload) > 6 else None
+                sfn_raw = struct.unpack_from("<H", payload, 7)[0] if len(payload) > 8 else None
+                chan_type_off, pdu_len_off, pdu_off = 9, 10, 12
+            else:
+                pci = struct.unpack_from("<H", payload, 3)[0] if len(payload) > 4 else None
+                earfcn = struct.unpack_from("<H", payload, 4)[0] if len(payload) > 5 else None
+                sfn_raw = struct.unpack_from("<H", payload, 6)[0] if len(payload) > 7 else None
+                chan_type_off, pdu_len_off, pdu_off = 8, 9, 11
+
+            sfn = (sfn_raw & 0x03FF) if sfn_raw is not None else None
 
             # Channel type with lookup dict for direction
-            chan_type = payload[8] if len(payload) > 8 else 0
+            chan_type = payload[chan_type_off] if len(payload) > chan_type_off else 0
             chan_info = self.LTE_RRC_CHAN_MAP.get(chan_type)
             if chan_info:
                 chan_name, direction = chan_info
@@ -1019,9 +1174,25 @@ class LTEAnalyzer:
                 chan_name = f"Chan_{chan_type}"
                 direction = "DL" if (chan_type % 2 == 0) else "UL"
 
-            # Try to determine the RRC message type from PDU content
-            msg_type_id = payload[9] if len(payload) > 9 else -1
-            msg_name = LTE_RRC_MSG_TYPES.get(msg_type_id, f"MsgType_{msg_type_id}")
+            # Decode message type from actual PDU bytes via UPER
+            msg_name = None
+            if len(payload) > pdu_off:
+                pdu_len = struct.unpack_from("<H", payload, pdu_len_off)[0] if len(payload) > pdu_len_off + 1 else 0
+                pdu_bytes = payload[pdu_off:pdu_off + pdu_len] if pdu_len else payload[pdu_off:]
+                msg_name = _decode_rrc_msg_from_pdu(pdu_bytes, chan_type, "LTE")
+
+            if msg_name is None:
+                # Fallback: channel-type defaults, then old lookup table
+                _LTE_CHAN_DEFAULTS = {
+                    0: "MasterInformationBlock",
+                    2: "RRCConnectionSetup",    # CCCH-DL: setup or reestablishment
+                    3: "RRCConnectionRequest",  # CCCH-UL
+                    6: "Paging",
+                }
+                msg_name = _LTE_CHAN_DEFAULTS.get(chan_type)
+                if msg_name is None:
+                    fallback_id = payload[chan_type_off + 1] if len(payload) > chan_type_off + 1 else -1
+                    msg_name = LTE_RRC_MSG_TYPES.get(fallback_id, f"MsgType_{fallback_id}")
 
             event = RRCEvent(
                 timestamp=pkt.timestamp,
@@ -1133,17 +1304,22 @@ class LTEAnalyzer:
                 sec_header = (nas_pdu[0] >> 4) & 0x0F
                 if sec_header == 0:
                     # Plain NAS message: byte[0]=sec_hdr+proto_disc, byte[1]=msg_type
-                    msg_type_byte = nas_pdu[1]
-                    if len(nas_pdu) >= 3:
-                        # Check for cause code in reject messages
-                        if msg_type_byte in (0x44, 0x4B, 0x4E):  # Reject messages
-                            cause_code = nas_pdu[2]
-                elif sec_header in (1, 2, 3, 4):
-                    # Security-protected: [0]=hdr, [1:5]=MAC, [2]=seq, [6:]=NAS
+                    candidate = nas_pdu[1]
+                    if candidate in NAS_EMM_MSG_TYPES:
+                        msg_type_byte = candidate
+                        if len(nas_pdu) >= 3:
+                            if msg_type_byte in (0x44, 0x4B, 0x4E):  # Reject messages
+                                cause_code = nas_pdu[2]
+                elif sec_header in (1, 3):
+                    # Integrity-protected only (not ciphered): cleartext inner PDU
+                    # [0]=hdr, [1:5]=MAC, [5]=seq, [6]=inner_proto_disc, [7]=msg_type
                     if len(nas_pdu) >= 8:
                         msg_type_byte = nas_pdu[7]
-                        if msg_type_byte in (0x44, 0x4B, 0x4E) and len(nas_pdu) >= 9:
+                        if msg_type_byte not in NAS_EMM_MSG_TYPES:
+                            msg_type_byte = None  # likely wrong offset
+                        elif msg_type_byte in (0x44, 0x4B, 0x4E) and len(nas_pdu) >= 9:
                             cause_code = nas_pdu[8]
+                # sec_header 2 or 4: ciphered — can't decode msg type
 
             if msg_type_byte is not None:
                 msg_name = NAS_EMM_MSG_TYPES.get(
@@ -1181,6 +1357,17 @@ class LTEAnalyzer:
                 if self.verbose:
                     extra = f" cause={cause_code} ({cause_text})" if cause_code else ""
                     print(f"  [LTE NAS] {direction} {msg_name}{extra}")
+            else:
+                # Couldn't decode — likely ciphered NAS
+                sec_header = (nas_pdu[0] >> 4) & 0x0F if len(nas_pdu) >= 1 else 0
+                if sec_header in (1, 2, 3, 4):
+                    event = NASEvent(
+                        timestamp=pkt.timestamp,
+                        tech="LTE",
+                        msg_type="Ciphered NAS EMM",
+                        direction=direction,
+                    )
+                    result.nas_events.append(event)
         except (struct.error, IndexError):
             result.parse_errors += 1
 
@@ -1215,16 +1402,29 @@ class LTEAnalyzer:
                         if sec_hdr in (1, 2, 3, 4):
                             # Security-protected EMM message
                             sec_protected = True
-                            # The actual msg_type is 6 bytes further
-                            # (after MAC[4] + seq[1])
-                            inner_off = scan_off + 6
-                            if inner_off < len(nas_region):
-                                msg_type_byte = nas_region[inner_off]
+                            if sec_hdr in (1, 3):
+                                # Integrity-protected only (not ciphered) —
+                                # inner PDU is cleartext, msg type at +7
+                                inner_off = scan_off + 7
+                                if inner_off < len(nas_region):
+                                    candidate = nas_region[inner_off]
+                                    if candidate in NAS_EMM_MSG_TYPES:
+                                        msg_type_byte = candidate
+                                    else:
+                                        # Try +6 as fallback (proto disc byte)
+                                        fb = scan_off + 6
+                                        if fb < len(nas_region) and nas_region[fb] in NAS_EMM_MSG_TYPES:
+                                            msg_type_byte = nas_region[fb]
+                            # sec_hdr 2 or 4: ciphered — can't decode msg type
+                            # msg_type_byte stays None, handled below
                             break
                         elif sec_hdr == 0:
                             # Plain NAS: msg_type at next byte
                             if scan_off + 1 < len(nas_region):
-                                msg_type_byte = nas_region[scan_off + 1]
+                                candidate = nas_region[scan_off + 1]
+                                # Validate: must be a known EMM msg type
+                                if candidate in NAS_EMM_MSG_TYPES:
+                                    msg_type_byte = candidate
                             break
 
                 if msg_type_byte is not None:
@@ -1258,11 +1458,12 @@ class LTEAnalyzer:
                             f"{msg_name}{prot_label} ({len(payload)}B)"
                         )
                 else:
-                    # Couldn't decode NAS message type — record as generic NAS event
+                    # Couldn't decode NAS message type — likely ciphered
+                    label = "Ciphered NAS EMM" if sec_protected else f"NAS PDU (v{version})"
                     event = NASEvent(
                         timestamp=pkt.timestamp,
                         tech="LTE",
-                        msg_type=f"NAS PDU (v{version})",
+                        msg_type=label,
                         direction=direction,
                         details=f"len={len(payload)}",
                     )
@@ -1454,6 +1655,68 @@ class LTEAnalyzer:
         except struct.error:
             result.parse_errors += 1
 
+    def _decode_mac_rach(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """
+        Decode 0xB061 LTE MAC RACH Attempt.
+        Payload layout v1:
+          [0]    version
+          [1]    num_samples
+          [2:4]  reserved
+          Per-attempt record (starting at [4]):
+            [4]    RACH cause
+            [5]    preamble index
+            [6:8]  timing advance (uint16 LE)
+            [8]    RACH result: 0=success, 1=failure, 2=aborted
+            [9]    contention type: 0=contention-based, 1=contention-free
+        """
+        payload = pkt.payload
+        if len(payload) < 10:
+            return
+
+        try:
+            version = payload[0]
+            preamble = payload[5] if len(payload) > 5 else None
+            timing_advance = struct.unpack_from("<H", payload, 6)[0] if len(payload) > 7 else None
+            rach_result_byte = payload[8] if len(payload) > 8 else 0
+            contention_type = payload[9] if len(payload) > 9 else 0
+
+            rach_results = {0: "Success", 1: "Failure", 2: "Aborted"}
+            rach_result = rach_results.get(rach_result_byte, f"Unknown({rach_result_byte})")
+            contention = "Contention-Free" if contention_type == 1 else "Contention-Based"
+
+            event_name = f"RACH {rach_result}"
+            details_parts = [contention]
+            if preamble is not None:
+                details_parts.append(f"preamble={preamble}")
+            if timing_advance is not None:
+                details_parts.append(f"TA={timing_advance}")
+
+            event = RRCEvent(
+                timestamp=pkt.timestamp,
+                tech="LTE",
+                event=event_name,
+                direction="UL",
+                details=", ".join(details_parts),
+            )
+            result.rrc_events.append(event)
+
+            # Flag RACH failures as anomalies
+            if rach_result_byte != 0:
+                result.anomalies.append(
+                    Anomaly(
+                        timestamp=pkt.timestamp,
+                        tech="LTE",
+                        category="rach_failure",
+                        severity="warning",
+                        description=f"LTE RACH {rach_result} ({contention}, preamble={preamble})",
+                    )
+                )
+
+            if self.verbose:
+                print(f"  [LTE RACH] {event_name} {', '.join(details_parts)}")
+        except (struct.error, IndexError):
+            result.parse_errors += 1
+
 
 # ---------------------------------------------------------------------------
 # 5G NR Analyzer — decodes NR-specific log packets
@@ -1566,31 +1829,51 @@ class NR5GAnalyzer:
             pci = None
             sfn = None
             chan_name = None
+            nr_arfcn = None
 
             if version >= 13 and len(payload) >= 18:
                 # v13+ sub-packet format:
                 # [0:4] header, [4:8] sub-packet header
                 # [8] channel_type, [9] direction_byte, [10:12] SFN
-                # [12:14] PCI (uint16 LE)
+                # [12:14] PCI (uint16 LE), [14:18] NR-ARFCN (uint32 LE)
+                # [18:20] PDU length, [20:] PDU bytes
                 chan_type = payload[8]
                 direction_byte = payload[9]
                 sfn = struct.unpack_from("<H", payload, 10)[0] & 0x03FF
                 pci = struct.unpack_from("<H", payload, 12)[0]
+                _raw_arfcn = struct.unpack_from("<I", payload, 14)[0] if len(payload) >= 18 else 0
+                # Validate: NR-ARFCN max is ~2300000 (FR2). Discard bogus values.
+                nr_arfcn = _raw_arfcn if 0 < _raw_arfcn <= 2300000 else None
                 chan_info = self.NR_RRC_CHAN_MAP.get(chan_type)
                 if chan_info:
                     chan_name, direction = chan_info
                 else:
                     chan_name = f"Chan_{chan_type}"
                     direction = "UL" if (direction_byte & 1) else "DL"
-                # Infer message type from channel when PDU parsing isn't feasible
-                if chan_type == 0:
-                    msg_name = "MIB"
-                elif chan_type == 1:
-                    msg_name = "SIB1"
-                else:
-                    # Try to read msg_type_id if payload is long enough
-                    msg_type_id = payload[18] if len(payload) > 18 else -1
-                    msg_name = NR_RRC_MSG_TYPES.get(msg_type_id, f"NR_RRC_{msg_type_id}")
+
+                # Decode message type from actual PDU bytes via UPER
+                msg_name = None
+                if len(payload) >= 20:
+                    pdu_len = struct.unpack_from("<H", payload, 18)[0]
+                    pdu_start = 20
+                    pdu_bytes = payload[pdu_start:pdu_start + pdu_len] if pdu_len else payload[pdu_start:]
+                    msg_name = _decode_rrc_msg_from_pdu(pdu_bytes, chan_type, "NR")
+
+                if msg_name is None:
+                    # Fallback: infer from channel type
+                    # For channels with few possible messages, use informed defaults
+                    _NR_CHAN_DEFAULTS = {
+                        0: "MIB",
+                        1: "SystemInformation",
+                        2: "RRCSetup",          # CCCH-DL: RRCSetup or RRCReject (Reject caught by UPER)
+                        3: "RRCSetupRequest",    # CCCH-UL: most common UL CCCH msg
+                        6: "Paging",
+                    }
+                    msg_name = _NR_CHAN_DEFAULTS.get(chan_type)
+                    if msg_name is None:
+                        # DCCH or unknown channel — can't infer message type
+                        msg_type_id = payload[18] if len(payload) > 18 else -1
+                        msg_name = NR_RRC_MSG_TYPES.get(msg_type_id, f"NR_RRC_{msg_type_id}")
             else:
                 # Legacy v1-v5 format
                 chan_type = payload[4] if len(payload) > 4 else 0
@@ -1599,6 +1882,8 @@ class NR5GAnalyzer:
                 msg_name = NR_RRC_MSG_TYPES.get(msg_type_id, f"NR_RRC_{msg_type_id}")
 
             details = f"chan={chan_name}" if chan_name else f"chan_type={chan_type}"
+            # Use NR-ARFCN when available (v13+ format)
+            earfcn = nr_arfcn
             event = RRCEvent(
                 timestamp=pkt.timestamp,
                 tech="NR",
@@ -1606,6 +1891,7 @@ class NR5GAnalyzer:
                 direction=direction,
                 details=details,
                 pci=pci,
+                earfcn=earfcn,
                 sfn=sfn,
             )
             result.rrc_events.append(event)
