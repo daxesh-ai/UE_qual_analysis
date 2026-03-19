@@ -27,15 +27,19 @@ from typing import Any, BinaryIO, Dict, List, Optional, Tuple
 # ---------------------------------------------------------------------------
 
 # LTE log codes
-LOG_LTE_ML1_SERV_CELL_MEAS = 0xB193
+LOG_LTE_ML1_SERV_CELL_MEAS = 0xB060   # LTE ML1 Serving Cell Meas (RSRP/RSRQ)
+LOG_LTE_ML1_SERV_CELL_MEAS_V2 = 0xB193  # LTE ML1 Serving Cell Meas (alternate, common in newer logs)
+LOG_LTE_ML1_PDSCH_STAT = 0xB139       # LTE ML1 PDSCH Stat (MCS/modulation/CA)
 LOG_LTE_RRC_OTA = 0xB0E0
 LOG_LTE_NAS_EMM_OTA = 0xB0C1
 LOG_LTE_NAS_EMM_STATE = 0xB0C0
 LOG_LTE_NAS_EMM_SEC_OTA = 0xB0E2  # NAS EMM OTA (Security Protected)
 LOG_LTE_NAS_ESM_OTA = 0xB0E3      # NAS ESM OTA (Session Management)
 LOG_LTE_MAC_DL_TB = 0xB063
-LOG_LTE_MAC_UL_TB = 0xB064
+LOG_LTE_MAC_UL_TB = 0xB064        # LTE ML1 PDSCH Stat (MCS/CA)
 LOG_LTE_MAC_RACH = 0xB061
+LOG_LTE_MAC_RACH_CONFIG = 0xB167      # LTE MAC RACH Config (SIB2 PRACH params)
+LOG_LTE_MAC_RACH_ATTEMPT = 0xB168     # LTE MAC RACH Attempt (Msg1/Msg2/Msg3)
 LOG_LTE_RRC_STATE = 0xB0C2
 LOG_LTE_PDCP_DL_STATS = 0xB0A0
 LOG_LTE_PDCP_UL_STATS = 0xB0A1
@@ -43,8 +47,17 @@ LOG_LTE_RRC_SERV_CELL_INFO = 0xB0ED
 
 # 5G NR log codes
 LOG_NR_ML1_MEAS_DB = 0xB8D2
+LOG_NR_ML1_SERV_CELL_BEAM = 0xB821  # NR ML1 Serving Cell Beam (SSB RSRP/RSRQ per beam, SINR)
+LOG_NR_ML1_PDSCH_STATUS = 0xB822    # NR ML1 PDSCH Status (MCS, Rank/MIMO, BLER)
+LOG_NR_ML1_PUSCH_POWER = 0xB823     # NR ML1 PUSCH Power (UL power control)
+LOG_NR_RLF_REPORT = 0xB825           # NR Radio Link Failure Report
+LOG_NR_MAC_RACH_TRIGGER = 0xB883    # NR MAC RACH Trigger (cause)
+LOG_NR_MAC_RACH_ATTEMPT = 0xB884    # NR MAC RACH Attempt (Msg1 preamble/power)
+LOG_NR_MAC_RACH_RESPONSE = 0xB885   # NR MAC RACH Response (Msg2 TA/grant/RNTI)
 LOG_NR_RRC_OTA = 0xB887
-LOG_NR_RRC_STATE = 0xB808         # NR RRC State
+LOG_NR_RRC_OTA_ALT = 0xB801         # NR RRC OTA (SA Registration)
+LOG_NR_NAS_OTA = 0xB802             # NR NAS OTA (SA NAS signaling)
+LOG_NR_RRC_STATE = 0xB808           # NR RRC State
 LOG_NR_NAS_MM5G_STATE = 0xB8D8
 LOG_NR_NAS_MM5G_STATE_ALT = 0xB809  # NR NAS 5GMM State (alternative)
 LOG_NR_NAS_SM5G_OTA = 0xB80A
@@ -52,7 +65,7 @@ LOG_NR_NAS_MM5G_OTA_PLAIN = 0xB80B  # NR NAS 5GMM OTA Plain
 LOG_NR_MAC_PDSCH_STATS = 0xB868
 LOG_NR_MAC_PUSCH_STATS = 0xB869
 LOG_NR_ML1_SEARCHER = 0xB8D0
-LOG_NR_PDCP_DL_STATS = 0xB814     # NR PDCP DL Stats
+LOG_NR_PDCP_DL_STATS = 0xB814       # NR PDCP DL Stats
 
 # DIAG command codes
 DIAG_LOG_F = 0x10  # Log packet
@@ -65,6 +78,8 @@ ISF_HEADER_MAGIC = b"\x01\x00"
 
 LOG_CODE_NAMES = {
     LOG_LTE_ML1_SERV_CELL_MEAS: "LTE ML1 Serving Cell Meas",
+    LOG_LTE_ML1_SERV_CELL_MEAS_V2: "LTE ML1 Serving Cell Meas (v2)",
+    LOG_LTE_ML1_PDSCH_STAT: "LTE ML1 PDSCH Stat",
     LOG_LTE_RRC_OTA: "LTE RRC OTA",
     LOG_LTE_RRC_STATE: "LTE RRC State",
     LOG_LTE_NAS_EMM_OTA: "LTE NAS EMM OTA",
@@ -73,12 +88,23 @@ LOG_CODE_NAMES = {
     LOG_LTE_NAS_ESM_OTA: "LTE NAS ESM OTA",
     LOG_LTE_MAC_DL_TB: "LTE MAC DL Transport Block",
     LOG_LTE_MAC_UL_TB: "LTE MAC UL Transport Block",
-    LOG_LTE_MAC_RACH: "LTE MAC RACH Attempt",
+    LOG_LTE_MAC_RACH: "LTE MAC RACH Attempt (legacy)",
+    LOG_LTE_MAC_RACH_CONFIG: "LTE MAC RACH Config",
+    LOG_LTE_MAC_RACH_ATTEMPT: "LTE MAC RACH Attempt",
     LOG_LTE_PDCP_DL_STATS: "LTE PDCP DL Stats",
     LOG_LTE_PDCP_UL_STATS: "LTE PDCP UL Stats",
     LOG_LTE_RRC_SERV_CELL_INFO: "LTE RRC Serving Cell Info",
     LOG_NR_ML1_MEAS_DB: "NR ML1 Meas Database",
+    LOG_NR_ML1_SERV_CELL_BEAM: "NR ML1 Serving Cell Beam",
+    LOG_NR_ML1_PDSCH_STATUS: "NR ML1 PDSCH Status",
+    LOG_NR_ML1_PUSCH_POWER: "NR ML1 PUSCH Power",
+    LOG_NR_RLF_REPORT: "NR Radio Link Failure",
+    LOG_NR_MAC_RACH_TRIGGER: "NR MAC RACH Trigger",
+    LOG_NR_MAC_RACH_ATTEMPT: "NR MAC RACH Attempt",
+    LOG_NR_MAC_RACH_RESPONSE: "NR MAC RACH Response",
     LOG_NR_RRC_OTA: "NR RRC OTA",
+    LOG_NR_RRC_OTA_ALT: "NR RRC OTA (SA)",
+    LOG_NR_NAS_OTA: "NR NAS OTA (SA)",
     LOG_NR_RRC_STATE: "NR RRC State",
     LOG_NR_NAS_MM5G_STATE: "NR NAS 5GMM State",
     LOG_NR_NAS_MM5G_STATE_ALT: "NR NAS 5GMM State (Alt)",
@@ -154,6 +180,46 @@ MM5G_CAUSE_CODES = {
     100: "Information element non-existent or not implemented",
     101: "Conditional IE error",
     111: "Protocol error, unspecified",
+}
+
+# RRC Release causes (TS 36.331 / TS 38.331)
+RRC_RELEASE_CAUSES = {
+    0: "other",
+    1: "cs-FallbackHighPriority",
+    2: "redirectedCarrierInfo",
+    3: "handoverCancellation",
+    4: "rrc-Suspend",
+    5: "drb-IntegrityFailure",
+    6: "spare2",
+    7: "spare1",
+}
+
+# RRC Reestablishment causes (TS 36.331 / TS 38.331)
+RRC_REESTABLISH_CAUSES = {
+    0: "reconfigurationFailure",
+    1: "handoverFailure",
+    2: "otherFailure",
+    3: "t310-Expiry",
+    4: "randomAccessProblem",
+    5: "rlc-MaxNumRetx",
+    6: "synchReconfigFailure-SCG",
+    7: "scg-Failure",
+}
+
+# RRC Reject — wait timer interpretation
+# The RRC Reject message contains a waitTime IE (value 1-16 in seconds)
+# Reason is inferred from context: congestion, access barring, etc.
+RRC_REJECT_REASONS = {
+    "short_wait": "Temporary congestion (waitTime < 5s)",
+    "medium_wait": "Cell overloaded (waitTime 5-10s)",
+    "long_wait": "Severe congestion / access barring (waitTime > 10s)",
+    "unknown": "Access rejected by gNB",
+}
+
+# RRC Setup Failure causes (TS 38.331 §5.3.3)
+RRC_SETUP_FAILURE_CAUSES = {
+    0: "congestion",
+    1: "unspecified",
 }
 
 # LTE RRC states
@@ -426,14 +492,14 @@ class DiagPacket:
 
     @property
     def tech(self) -> str:
+        if 0xB060 <= self.log_code <= 0xB06F:
+            return "LTE"  # LTE MAC (RACH, DL/UL TB, ML1 Serving Cell)
         if 0xB000 <= self.log_code <= 0xB0FF:
-            return "LTE"
+            return "LTE"  # LTE core (RRC, NAS, MAC, PDCP)
         if 0xB100 <= self.log_code <= 0xB1FF:
-            return "LTE"  # LTE ML1 (Layer 1 measurements)
+            return "LTE"  # LTE ML1 (L1 measurements, PDSCH, serving cell)
         if 0xB800 <= self.log_code <= 0xB8FF:
             return "NR"
-        if 0xB060 <= self.log_code <= 0xB06F:
-            return "LTE"
         return "Unknown"
 
 
@@ -448,6 +514,8 @@ class SignalSample:
     pci: Optional[int] = None
     earfcn: Optional[int] = None  # or NR-ARFCN
     band: Optional[int] = None
+    beam_id: Optional[int] = None  # SSB beam index (NR only)
+    is_serving: bool = True        # True=serving cell, False=neighbor
 
 
 @dataclass
@@ -460,6 +528,8 @@ class RRCEvent:
     pci: Optional[int] = None
     earfcn: Optional[int] = None  # EARFCN or NR-ARFCN
     sfn: Optional[int] = None  # System Frame Number
+    cause: str = ""              # e.g. "congestion", "t310-Expiry"
+    wait_time: Optional[int] = None  # seconds (for RRC Reject)
 
 
 @dataclass
@@ -489,6 +559,86 @@ class ThroughputSample:
         return 0.0
 
 
+# NR MCS → Modulation mapping (TS 38.214 Table 5.1.3.1-2, 256QAM table)
+NR_MCS_MODULATION = {}
+for _m in range(0, 5):
+    NR_MCS_MODULATION[_m] = "QPSK"
+for _m in range(5, 11):
+    NR_MCS_MODULATION[_m] = "16QAM"
+for _m in range(11, 20):
+    NR_MCS_MODULATION[_m] = "64QAM"
+for _m in range(20, 28):
+    NR_MCS_MODULATION[_m] = "256QAM"
+NR_MCS_MODULATION[28] = "256QAM"
+
+# LTE MCS → Modulation mapping (TS 36.213 Table 7.1.7.1-1)
+LTE_MCS_MODULATION = {}
+for _m in range(0, 10):
+    LTE_MCS_MODULATION[_m] = "QPSK"
+for _m in range(10, 17):
+    LTE_MCS_MODULATION[_m] = "16QAM"
+for _m in range(17, 29):
+    LTE_MCS_MODULATION[_m] = "64QAM"
+for _m in range(29, 32):
+    LTE_MCS_MODULATION[_m] = "256QAM"
+
+
+def mcs_to_modulation(mcs: int, tech: str = "NR") -> str:
+    """Map MCS index to modulation scheme name."""
+    table = NR_MCS_MODULATION if tech == "NR" else LTE_MCS_MODULATION
+    return table.get(mcs, f"MCS{mcs}")
+
+
+@dataclass
+class PHYSample:
+    """Physical layer statistics — MCS, MIMO rank, BLER, TBS."""
+    timestamp: datetime
+    tech: str           # "LTE" or "NR"
+    direction: str      # "DL" or "UL"
+    mcs: Optional[int] = None
+    rank: Optional[int] = None       # MIMO layers (1, 2, 4, etc.)
+    bler: Optional[float] = None     # 0.0–1.0
+    num_rbs: Optional[int] = None    # resource blocks allocated
+    tbs: Optional[int] = None        # transport block size (bytes)
+    sfn: Optional[int] = None        # system frame number
+    slot: Optional[int] = None       # slot number
+    cqi: Optional[int] = None        # CQI (0-15)
+    ri: Optional[int] = None         # Rank Indicator
+
+    @property
+    def modulation(self) -> str:
+        if self.mcs is not None:
+            return mcs_to_modulation(self.mcs, self.tech)
+        return ""
+
+
+@dataclass
+class PowerSample:
+    """UL power control measurements."""
+    timestamp: datetime
+    tech: str
+    tx_power: Optional[float] = None         # dBm
+    power_headroom: Optional[float] = None   # dB
+    pathloss: Optional[float] = None         # dB
+
+
+@dataclass
+class RACHEvent:
+    """RACH procedure event — tracks Msg1/Msg2/Msg3 flow."""
+    timestamp: datetime
+    tech: str               # "LTE" or "NR"
+    msg_stage: str          # "Msg1", "Msg2", "Msg3", "Trigger", "Config"
+    preamble_id: Optional[int] = None
+    preamble_power: Optional[float] = None   # dBm (target received power)
+    target_power: Optional[float] = None     # dBm (Tx target)
+    timing_advance: Optional[int] = None
+    temp_rnti: Optional[int] = None
+    cause: str = ""          # "Initial Access", "Handover", etc.
+    result: str = ""         # "Success", "Failure", "Timeout"
+    attempt_num: int = 0
+    details: str = ""
+
+
 @dataclass
 class Anomaly:
     timestamp: datetime
@@ -505,6 +655,9 @@ class AnalysisResult:
     rrc_events: List[RRCEvent] = field(default_factory=list)
     nas_events: List[NASEvent] = field(default_factory=list)
     throughput_samples: List[ThroughputSample] = field(default_factory=list)
+    phy_samples: List[PHYSample] = field(default_factory=list)
+    power_samples: List[PowerSample] = field(default_factory=list)
+    rach_events: List[RACHEvent] = field(default_factory=list)
     anomalies: List[Anomaly] = field(default_factory=list)
     packet_counts: Dict[int, int] = field(default_factory=lambda: defaultdict(int))
     total_packets: int = 0
@@ -887,8 +1040,10 @@ class LTEAnalyzer:
 
     def decode_packet(self, pkt: DiagPacket, result: AnalysisResult) -> None:
         code = pkt.log_code
-        if code == LOG_LTE_ML1_SERV_CELL_MEAS:
+        if code in (LOG_LTE_ML1_SERV_CELL_MEAS, LOG_LTE_ML1_SERV_CELL_MEAS_V2):
             self._decode_ml1_serving_cell(pkt, result)
+        elif code == LOG_LTE_ML1_PDSCH_STAT:
+            self._decode_ml1_pdsch_stat(pkt, result)
         elif code == LOG_LTE_RRC_OTA:
             self._decode_rrc_ota(pkt, result)
         elif code == LOG_LTE_NAS_EMM_OTA:
@@ -909,17 +1064,18 @@ class LTEAnalyzer:
             self._decode_mac_tb(pkt, result, "UL")
         elif code == LOG_LTE_MAC_RACH:
             self._decode_mac_rach(pkt, result)
+        elif code == LOG_LTE_MAC_RACH_ATTEMPT:
+            self._decode_mac_rach_attempt(pkt, result)
+        elif code == LOG_LTE_MAC_RACH_CONFIG:
+            self._decode_mac_rach_config(pkt, result)
 
     def _decode_ml1_serving_cell(
         self, pkt: DiagPacket, result: AnalysisResult
     ) -> None:
         """
-        Decode 0xB821 LTE ML1 Serving Cell Measurement.
-        Payload layout (version-dependent, common fields):
-          [0]    version
-          [1:3]  num_cells (or sub-packet count)
-          Followed by per-cell records with EARFCN, PCI, RSRP, RSRQ, RSSI, SINR.
-        RSRP/RSRQ are typically stored as (value * 64 + offset) or similar scaled int.
+        Decode LTE ML1 Serving Cell Measurement (0xB060 or 0xB193).
+        0xB193 uses sub-packet structure with bitfield-packed measurements.
+        0xB060 with short payloads uses fixed-offset layout.
         """
         payload = pkt.payload
         if len(payload) < 4:
@@ -927,14 +1083,15 @@ class LTEAnalyzer:
 
         version = payload[0]
 
-        # Version-dependent decode
-        if version >= 5:
-            # v5+ uses sub-packet structure with bitfield-packed measurements
+        # 0xB193 always uses sub-packet structure — route to v5+ scanner
+        # regardless of the version byte, because even version=1 has sub-packets
+        if pkt.log_code == LOG_LTE_ML1_SERV_CELL_MEAS_V2:
+            self._decode_ml1_v5_plus(pkt, payload, version, result)
+        elif version >= 5:
             self._decode_ml1_v5_plus(pkt, payload, version, result)
         elif version in (1, 2, 3, 4):
             self._decode_ml1_v1_v5(pkt, payload, version, result)
         else:
-            # Attempt generic decode for unknown versions
             self._decode_ml1_generic(pkt, payload, result)
 
     def _decode_ml1_v1_v5(
@@ -1625,35 +1782,64 @@ class LTEAnalyzer:
     ) -> None:
         """
         Decode 0xB063/0xB064 LTE MAC DL/UL Transport Block.
-        Payload contains aggregate TB size across num_samples subframes.
+        v1-19: [0] version(1), [1] num_samples(1), [2:6] total_tb_bytes(4)
+        v20+:  [0:4] version(uint32), [4:8] num_subframes(uint32),
+               then 32-byte per-subframe records with TB size at record[8:12]
         """
         payload = pkt.payload
         if len(payload) < 8:
             return
 
         try:
-            version = payload[0]
-            # Number of subframes covered by this log packet
-            num_samples = payload[1] if len(payload) > 1 else 1
-            num_samples = max(num_samples, 1)
+            version_byte = payload[0]
 
-            # TB size (total bytes across all subframes) at offset 2
-            total_bytes = 0
-            if len(payload) >= 6:
-                tb_size = struct.unpack_from("<I", payload, 2)[0]
-                if tb_size < 10_000_000:  # sanity: less than 10MB per packet
-                    total_bytes = tb_size
+            # v20+ uses uint32 header fields
+            if version_byte >= 20 and len(payload) >= 16:
+                version = struct.unpack_from("<I", payload, 0)[0]
+                num_subframes = struct.unpack_from("<I", payload, 4)[0]
+                num_subframes = max(num_subframes, 1)
 
-            if total_bytes > 0:
-                sample = ThroughputSample(
-                    timestamp=pkt.timestamp,
-                    tech="LTE",
-                    direction=direction,
-                    bytes_count=total_bytes,
-                    tb_count=num_samples,
-                    duration_ms=float(num_samples),  # num_samples subframes × 1ms each
-                )
-                result.throughput_samples.append(sample)
+                # Sum TB sizes from per-subframe records (32 bytes each, TB at record+8)
+                rec_start = 8
+                rec_size = 32
+                total_bytes = 0
+                for i in range(min(num_subframes, 200)):
+                    off = rec_start + i * rec_size + 8  # TB size at offset 8 within record
+                    if off + 4 > len(payload):
+                        break
+                    tb = struct.unpack_from("<I", payload, off)[0]
+                    if tb < 150_000:  # max LTE TB ~97KB (20MHz 4x4 256QAM)
+                        total_bytes += tb
+
+                if total_bytes > 0:
+                    sample = ThroughputSample(
+                        timestamp=pkt.timestamp,
+                        tech="LTE",
+                        direction=direction,
+                        bytes_count=total_bytes,
+                        tb_count=num_subframes,
+                        duration_ms=float(num_subframes),
+                    )
+                    result.throughput_samples.append(sample)
+            else:
+                # Legacy layout: [0] version(1), [1] num_samples(1), [2:6] tb_bytes(4)
+                num_samples = max(payload[1] if len(payload) > 1 else 1, 1)
+                total_bytes = 0
+                if len(payload) >= 6:
+                    tb_size = struct.unpack_from("<I", payload, 2)[0]
+                    if tb_size < 10_000_000:
+                        total_bytes = tb_size
+
+                if total_bytes > 0:
+                    sample = ThroughputSample(
+                        timestamp=pkt.timestamp,
+                        tech="LTE",
+                        direction=direction,
+                        bytes_count=total_bytes,
+                        tb_count=num_samples,
+                        duration_ms=float(num_samples),
+                    )
+                    result.throughput_samples.append(sample)
         except struct.error:
             result.parse_errors += 1
 
@@ -1760,6 +1946,194 @@ class LTEAnalyzer:
         # Couldn't find a valid pattern — return unknown
         return 255, 0, None, None
 
+    def _decode_mac_rach_attempt(
+        self, pkt: DiagPacket, result: AnalysisResult
+    ) -> None:
+        """
+        Decode 0xB168 LTE MAC RACH Attempt — Msg1/Msg2/Msg3 tracking.
+        v24+ layout (uint32 header): [0:4] version, [4:8] EARFCN, [8:12] fields...
+        Per the payload dump: version at [0:4]=24(0x18), then packed fields.
+        """
+        payload = pkt.payload
+        if len(payload) < 16:
+            return
+
+        try:
+            version = struct.unpack_from("<I", payload, 0)[0]
+
+            # Extract fields from the packed data
+            # Typical layout after header: preamble(1), power(i16), TA(u16), result(1)
+            # Scan for recognizable fields
+            preamble_id = None
+            preamble_power = None
+            attempt_num = 0
+            result_str = ""
+
+            # For v24: fields are at specific offsets based on payload analysis
+            # [8:10] contains a packed field with preamble info
+            if len(payload) >= 14:
+                # Byte at [8] often has subframe/attempt info
+                raw8 = payload[8]
+                raw9 = payload[9]
+
+                # Preamble ID is typically 0-63
+                preamble_candidates = [payload[off] for off in range(8, min(len(payload), 20))
+                                       if payload[off] <= 63]
+                if preamble_candidates:
+                    preamble_id = preamble_candidates[0]
+
+                # Preamble power: scan for int16 in range [-120, -70] dBm
+                for off in range(10, min(len(payload) - 2, 24), 2):
+                    p_raw = struct.unpack_from("<h", payload, off)[0]
+                    p_val = p_raw / 10.0
+                    if -130 < p_val < -50:
+                        preamble_power = p_val
+                        break
+
+            # Attempt count (scan for small values 1-16)
+            for off in range(12, min(len(payload), 20)):
+                if 1 <= payload[off] <= 16:
+                    attempt_num = payload[off]
+                    break
+
+            evt = RACHEvent(
+                timestamp=pkt.timestamp,
+                tech="LTE",
+                msg_stage="Msg1",
+                preamble_id=preamble_id,
+                preamble_power=preamble_power,
+                attempt_num=attempt_num,
+                details=f"v{version}",
+            )
+            result.rach_events.append(evt)
+
+            if self.verbose:
+                print(f"  [LTE RACH Attempt] preamble={preamble_id} power={preamble_power} attempts={attempt_num}")
+
+        except (struct.error, IndexError):
+            result.parse_errors += 1
+
+    def _decode_mac_rach_config(
+        self, pkt: DiagPacket, result: AnalysisResult
+    ) -> None:
+        """
+        Decode 0xB167 LTE MAC RACH Config — PRACH parameters from SIB2.
+        """
+        payload = pkt.payload
+        if len(payload) < 16:
+            return
+
+        try:
+            version = struct.unpack_from("<I", payload, 0)[0]
+
+            # Extract PRACH config parameters
+            # These are typically packed in the payload after the header
+            details_parts = [f"v{version}"]
+
+            # Scan for prachConfigIndex (0-63) and target power values
+            if len(payload) >= 28:
+                # Target received power: typically int16 at a known offset, in dBm*10
+                for off in range(8, min(len(payload) - 2, 28), 2):
+                    p_raw = struct.unpack_from("<h", payload, off)[0]
+                    p_val = p_raw / 10.0
+                    if -130 < p_val < -50:
+                        details_parts.append(f"targetRxPower={p_val:.0f}dBm")
+                        break
+
+            evt = RACHEvent(
+                timestamp=pkt.timestamp,
+                tech="LTE",
+                msg_stage="Config",
+                details=", ".join(details_parts),
+            )
+            result.rach_events.append(evt)
+
+        except (struct.error, IndexError):
+            result.parse_errors += 1
+
+    def _decode_ml1_pdsch_stat(
+        self, pkt: DiagPacket, result: AnalysisResult
+    ) -> None:
+        """
+        Decode 0xB139 LTE ML1 PDSCH Stat.
+        Extracts MCS, modulation, transport block size for LTE DL.
+        Layout (common):
+          [0]    version
+          [1]    num_records
+          [2:4]  SFN (uint16)
+          Per-record:
+            MCS(1), num_layers(1), TBS(4), num_RBs(2)
+        """
+        payload = pkt.payload
+        if len(payload) < 8:
+            return
+
+        try:
+            version = payload[0]
+            num_records = payload[1] if len(payload) > 1 else 0
+            num_records = min(num_records, 32)
+
+            sfn = None
+            if len(payload) >= 4:
+                sfn_raw = struct.unpack_from("<H", payload, 2)[0]
+                sfn = sfn_raw & 0x3FF  # 10 bits for SFN
+                if sfn > 1023:
+                    sfn = None
+
+            if version <= 2:
+                rec_start = 4
+                rec_size = 8  # MCS(1)+layers(1)+TBS(4)+RBs(2)
+            else:
+                rec_start = 8
+                rec_size = 8
+
+            # Adapt record size if payload is too short
+            max_per_rec = (len(payload) - rec_start) // max(num_records, 1)
+            if max_per_rec < rec_size and max_per_rec >= 4:
+                rec_size = max_per_rec
+
+            for i in range(num_records):
+                off = rec_start + i * rec_size
+                if off + min(rec_size, 4) > len(payload):
+                    break
+
+                mcs = payload[off]
+                layers = payload[off + 1] if off + 1 < len(payload) else 1
+
+                tbs = None
+                if rec_size >= 6 and off + 6 <= len(payload):
+                    tbs = struct.unpack_from("<I", payload, off + 2)[0]
+                    if tbs > 500_000:
+                        tbs = None
+
+                num_rbs = None
+                if rec_size >= 8 and off + 8 <= len(payload):
+                    num_rbs = struct.unpack_from("<H", payload, off + 6)[0]
+                    if num_rbs > 110:  # max LTE RBs for 20 MHz
+                        num_rbs = None
+
+                if mcs > 31:
+                    continue
+                layers = max(1, min(layers, 4)) if 1 <= layers <= 8 else None
+
+                sample = PHYSample(
+                    timestamp=pkt.timestamp,
+                    tech="LTE",
+                    direction="DL",
+                    mcs=mcs,
+                    rank=layers,
+                    tbs=tbs,
+                    num_rbs=num_rbs,
+                    sfn=sfn,
+                )
+                result.phy_samples.append(sample)
+
+            if self.verbose and num_records > 0:
+                print(f"  [LTE PDSCH v{version}] {num_records} records, SFN={sfn}")
+
+        except struct.error:
+            result.parse_errors += 1
+
 
 # ---------------------------------------------------------------------------
 # 5G NR Analyzer — decodes NR-specific log packets
@@ -1775,8 +2149,24 @@ class NR5GAnalyzer:
         code = pkt.log_code
         if code == LOG_NR_ML1_MEAS_DB:
             self._decode_ml1_meas_db(pkt, result)
-        elif code == LOG_NR_RRC_OTA:
+        elif code == LOG_NR_ML1_SERV_CELL_BEAM:
+            self._decode_ml1_serv_cell_beam(pkt, result)
+        elif code == LOG_NR_ML1_PDSCH_STATUS:
+            self._decode_ml1_pdsch_status(pkt, result)
+        elif code == LOG_NR_ML1_PUSCH_POWER:
+            self._decode_ml1_pusch_power(pkt, result)
+        elif code == LOG_NR_RLF_REPORT:
+            self._decode_rlf_report(pkt, result)
+        elif code == LOG_NR_MAC_RACH_TRIGGER:
+            self._decode_rach_trigger(pkt, result)
+        elif code == LOG_NR_MAC_RACH_ATTEMPT:
+            self._decode_rach_attempt(pkt, result)
+        elif code == LOG_NR_MAC_RACH_RESPONSE:
+            self._decode_rach_response(pkt, result)
+        elif code in (LOG_NR_RRC_OTA, LOG_NR_RRC_OTA_ALT):
             self._decode_rrc_ota(pkt, result)
+        elif code == LOG_NR_NAS_OTA:
+            self._decode_nas_ota(pkt, result)
         elif code == LOG_NR_RRC_STATE:
             self._decode_rrc_state(pkt, result)
         elif code in (LOG_NR_NAS_MM5G_STATE, LOG_NR_NAS_MM5G_STATE_ALT):
@@ -1845,6 +2235,465 @@ class NR5GAnalyzer:
                         f"SS-SINR={sample.sinr}"
                     )
         except struct.error:
+            result.parse_errors += 1
+
+    def _decode_ml1_serv_cell_beam(
+        self, pkt: DiagPacket, result: AnalysisResult
+    ) -> None:
+        """
+        Decode 0xB821 NR ML1 Serving Cell Beam.
+        Per-beam SSB RSRP/RSRQ/SINR for beamforming analysis.
+        v1-2: fixed-offset per-beam records
+        v20+: uint32 header with bitfield-packed measurements (like LTE ML1 v5+)
+        """
+        payload = pkt.payload
+        if len(payload) < 8:
+            return
+
+        try:
+            version = payload[0]
+
+            # Extract PCI from header — consistently at offset 8 as uint16 in v20+
+            pci = None
+            if version >= 20 and len(payload) >= 10:
+                pci_candidate = struct.unpack_from("<H", payload, 8)[0]
+                if 0 < pci_candidate < 1008:
+                    pci = pci_candidate
+
+            # v20+ (including v26): use bitfield scanning for measurements
+            if version >= 10:
+                self._decode_beam_v20_plus(pkt, payload, version, pci, result)
+            else:
+                self._decode_beam_legacy(pkt, payload, version, result)
+
+        except struct.error:
+            result.parse_errors += 1
+
+    def _decode_beam_legacy(
+        self, pkt: DiagPacket, payload: bytes, version: int, result: AnalysisResult
+    ) -> None:
+        """Decode 0xB821 beam measurements for v1-9 (fixed-offset records)."""
+        num_beams = payload[1] if len(payload) > 1 else 0
+        num_beams = min(num_beams, 16)
+        rec_start = 4 if version <= 2 else 8
+        rec_size = 9
+
+        for i in range(num_beams):
+            off = rec_start + i * rec_size
+            if off + rec_size > len(payload):
+                break
+            beam_id = payload[off]
+            pci = struct.unpack_from("<H", payload, off + 1)[0]
+            rsrp_raw = struct.unpack_from("<h", payload, off + 3)[0]
+            rsrq_raw = struct.unpack_from("<h", payload, off + 5)[0]
+            sinr_raw = struct.unpack_from("<h", payload, off + 7)[0]
+
+            rsrp = rsrp_raw * 0.0625 - 156.0
+            rsrq = rsrq_raw * 0.0625 - 43.0
+            sinr = sinr_raw * 0.0625 - 20.0
+
+            if pci < 1008 and -156 < rsrp < -30:
+                sample = SignalSample(
+                    timestamp=pkt.timestamp, tech="NR",
+                    rsrp=round(rsrp, 2), rsrq=round(rsrq, 2), sinr=round(sinr, 2),
+                    pci=pci, beam_id=beam_id,
+                )
+                result.signal_samples.append(sample)
+
+    def _decode_beam_v20_plus(
+        self, pkt: DiagPacket, payload: bytes, version: int,
+        header_pci: Optional[int], result: AnalysisResult
+    ) -> None:
+        """Decode 0xB821 beam measurements for v20+ using bitfield scanning."""
+        # Scan for bitfield-packed measurements: 11-bit RSRP, 10-bit RSRQ, 9-bit SINR
+        # Each valid measurement produces one beam sample
+        beam_idx = 0
+        scan_start = min(28, len(payload) - 4)  # skip header
+
+        for off in range(scan_start, min(len(payload) - 4, 200), 4):
+            word = struct.unpack_from("<I", payload, off)[0]
+            rsrp_raw = word & 0x7FF  # 11 bits
+            rsrp = rsrp_raw * 0.0625 - 156.0
+
+            if -140 < rsrp < -40:
+                rsrq_raw = (word >> 11) & 0x3FF
+                sinr_raw = (word >> 21) & 0x1FF
+                rsrq = rsrq_raw * 0.0625 - 43.0
+                sinr = sinr_raw * 0.0625 - 20.0
+
+                # Only accept if SINR is in valid range
+                if -23 < sinr < 40:
+                    sample = SignalSample(
+                        timestamp=pkt.timestamp, tech="NR",
+                        rsrp=round(rsrp, 2),
+                        rsrq=round(rsrq, 2) if -30 < rsrq < 10 else None,
+                        sinr=round(sinr, 2),
+                        pci=header_pci,
+                        beam_id=beam_idx,
+                    )
+                    result.signal_samples.append(sample)
+                    beam_idx += 1
+
+        if self.verbose and beam_idx > 0:
+            print(f"  [NR Beam v{version}] {beam_idx} beams found (bitfield scan)")
+
+    def _decode_ml1_pdsch_status(
+        self, pkt: DiagPacket, result: AnalysisResult
+    ) -> None:
+        """
+        Decode 0xB822 NR ML1 PDSCH Status.
+        Extracts MCS, MIMO layers, BLER, TBS, SFN/slot for DL performance.
+        Layout (common):
+          [0]     version
+          [1]     num_records
+          [2:4]   SFN(10 bits) + slot(6 bits) packed, or SFN(2) separately
+          Per-record (variable offset):
+            MCS(1), layers(1), BLER_raw(2), num_RBs(2), TBS(4)
+        """
+        payload = pkt.payload
+        if len(payload) < 8:
+            return
+
+        try:
+            version = payload[0]
+            num_records = payload[1] if len(payload) > 1 else 0
+            num_records = min(num_records, 32)  # sanity cap
+
+            # Extract SFN/slot from header
+            sfn = None
+            slot = None
+            if len(payload) >= 4:
+                sfn_slot_word = struct.unpack_from("<H", payload, 2)[0]
+                sfn = (sfn_slot_word >> 6) & 0x3FF  # upper 10 bits
+                slot = sfn_slot_word & 0x3F          # lower 6 bits
+                if sfn > 1023:
+                    sfn = None
+                if slot is not None and slot > 79:
+                    slot = None
+
+            # Determine record layout by version
+            if version <= 2:
+                rec_start = 4
+                rec_size = 10  # MCS(1)+layers(1)+BLER(2)+RBs(2)+TBS(4)
+            else:
+                rec_start = 8  # sub-packet header
+                rec_size = 10
+
+            # Fall back to shorter record if payload doesn't fit
+            max_possible = (len(payload) - rec_start) // num_records if num_records > 0 else 0
+            if max_possible < rec_size and max_possible >= 6:
+                rec_size = 6  # no TBS field
+
+            for i in range(num_records):
+                off = rec_start + i * rec_size
+                if off + min(rec_size, 6) > len(payload):
+                    break
+
+                mcs = payload[off]
+                layers = payload[off + 1]
+                bler_raw = struct.unpack_from("<H", payload, off + 2)[0]
+                num_rbs = struct.unpack_from("<H", payload, off + 4)[0]
+
+                # TBS if record is long enough
+                tbs = None
+                if rec_size >= 10 and off + 10 <= len(payload):
+                    tbs = struct.unpack_from("<I", payload, off + 6)[0]
+                    if tbs > 1_000_000:  # sanity: > 1MB per slot is impossible
+                        tbs = None
+
+                # MCS valid range: 0-28 for NR
+                if mcs > 28:
+                    continue
+                # Layers valid range: 1-4 (MIMO)
+                layers = max(1, min(layers, 4)) if 1 <= layers <= 8 else None
+                # BLER: typically 0-1000 (representing 0.0%-100.0%)
+                bler = bler_raw / 1000.0 if bler_raw <= 1000 else None
+                # RBs sanity
+                if num_rbs > 273:  # max NR RBs for 100 MHz
+                    num_rbs = None
+
+                sample = PHYSample(
+                    timestamp=pkt.timestamp,
+                    tech="NR",
+                    direction="DL",
+                    mcs=mcs,
+                    rank=layers,
+                    bler=bler,
+                    num_rbs=num_rbs,
+                    tbs=tbs,
+                    sfn=sfn,
+                    slot=(slot + i) if slot is not None else None,
+                )
+                result.phy_samples.append(sample)
+
+            if self.verbose and num_records > 0:
+                print(f"  [NR PDSCH Status v{version}] {num_records} records")
+
+        except struct.error:
+            result.parse_errors += 1
+
+    def _decode_ml1_pusch_power(
+        self, pkt: DiagPacket, result: AnalysisResult
+    ) -> None:
+        """
+        Decode 0xB823 NR ML1 PUSCH Power.
+        Extracts Tx power, power headroom, and pathloss for UL analysis.
+        Layout (common):
+          [0]     version
+          [1]     num_records
+          Per-record:
+            tx_power(2, int16), power_headroom(2, int16), pathloss(2, uint16)
+        """
+        payload = pkt.payload
+        if len(payload) < 8:
+            return
+
+        try:
+            version = payload[0]
+            num_records = payload[1] if len(payload) > 1 else 0
+            num_records = min(num_records, 16)  # sanity cap
+
+            if version <= 2:
+                rec_start = 4
+                rec_size = 6  # tx_power(2)+headroom(2)+pathloss(2)
+            else:
+                rec_start = 8
+                rec_size = 6
+
+            for i in range(num_records):
+                off = rec_start + i * rec_size
+                if off + rec_size > len(payload):
+                    break
+
+                tx_power_raw = struct.unpack_from("<h", payload, off)[0]
+                headroom_raw = struct.unpack_from("<h", payload, off + 2)[0]
+                pathloss_raw = struct.unpack_from("<H", payload, off + 4)[0]
+
+                # Scale: tx_power and headroom in 0.1 dBm/dB units typically
+                tx_power = tx_power_raw / 10.0
+                headroom = headroom_raw / 10.0
+                pathloss = pathloss_raw / 10.0
+
+                # Sanity: Tx power -50 to +30 dBm, headroom -10 to +40 dB
+                if not (-50 < tx_power < 40):
+                    continue
+                if not (-20 < headroom < 50):
+                    headroom = None
+                if not (30 < pathloss < 200):
+                    pathloss = None
+
+                sample = PowerSample(
+                    timestamp=pkt.timestamp,
+                    tech="NR",
+                    tx_power=round(tx_power, 1),
+                    power_headroom=round(headroom, 1) if headroom is not None else None,
+                    pathloss=round(pathloss, 1) if pathloss is not None else None,
+                )
+                result.power_samples.append(sample)
+
+            if self.verbose and num_records > 0:
+                print(f"  [NR PUSCH Power v{version}] {num_records} records")
+
+        except struct.error:
+            result.parse_errors += 1
+
+    def _decode_rlf_report(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """Decode 0xB825 NR Radio Link Failure Report."""
+        try:
+            result.anomalies.append(
+                Anomaly(
+                    timestamp=pkt.timestamp,
+                    tech="NR",
+                    category="rlf",
+                    severity="critical",
+                    description="NR Radio Link Failure detected",
+                )
+            )
+            result.rrc_events.append(RRCEvent(
+                timestamp=pkt.timestamp, tech="NR",
+                event="Radio Link Failure", direction="",
+            ))
+            if self.verbose:
+                print(f"  [NR RLF] Radio Link Failure at {pkt.timestamp}")
+        except Exception:
+            result.parse_errors += 1
+
+    def _decode_rach_trigger(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """Decode 0xB883 NR MAC RACH Trigger — cause of RACH initiation."""
+        payload = pkt.payload
+        if len(payload) < 4:
+            return
+        try:
+            cause_byte = payload[2] if len(payload) > 2 else 0
+            causes = {0: "Initial Access", 1: "Handover", 2: "Beam Failure Recovery",
+                      3: "Other SI Request", 4: "Scheduling Request Failure"}
+            cause = causes.get(cause_byte, f"Cause({cause_byte})")
+
+            evt = RACHEvent(
+                timestamp=pkt.timestamp, tech="NR", msg_stage="Trigger", cause=cause,
+            )
+            result.rach_events.append(evt)
+            if self.verbose:
+                print(f"  [NR RACH Trigger] {cause}")
+        except (struct.error, IndexError):
+            result.parse_errors += 1
+
+    def _decode_rach_attempt(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """Decode 0xB884 NR MAC RACH Attempt — Msg1 preamble details."""
+        payload = pkt.payload
+        if len(payload) < 8:
+            return
+        try:
+            preamble_id = None
+            target_power = None
+            attempt_num = 0
+
+            # Scan for preamble ID (0-63) and power values
+            for off in range(2, min(len(payload), 16)):
+                if payload[off] <= 63:
+                    preamble_id = payload[off]
+                    break
+            for off in range(4, min(len(payload) - 2, 16), 2):
+                p_raw = struct.unpack_from("<h", payload, off)[0]
+                p_val = p_raw / 10.0
+                if -130 < p_val < -50:
+                    target_power = p_val
+                    break
+
+            evt = RACHEvent(
+                timestamp=pkt.timestamp, tech="NR", msg_stage="Msg1",
+                preamble_id=preamble_id, target_power=target_power,
+            )
+            result.rach_events.append(evt)
+            if self.verbose:
+                print(f"  [NR RACH Msg1] preamble={preamble_id} power={target_power}")
+        except (struct.error, IndexError):
+            result.parse_errors += 1
+
+    def _decode_rach_response(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """Decode 0xB885 NR MAC RACH Response — Msg2 (RAR) with TA, UL grant, Temp-RNTI."""
+        payload = pkt.payload
+        if len(payload) < 8:
+            return
+        try:
+            # v20 layout: [0:4] version, then fields
+            version = struct.unpack_from("<I", payload, 0)[0] if len(payload) >= 4 else payload[0]
+
+            timing_advance = None
+            temp_rnti = None
+
+            # TA is typically uint16 in the response
+            for off in range(8, min(len(payload) - 2, 24), 2):
+                ta_candidate = struct.unpack_from("<H", payload, off)[0]
+                if 0 < ta_candidate < 3846:  # NR TA range
+                    timing_advance = ta_candidate
+                    break
+
+            # Temp-RNTI is uint16 in range 0x0001-0xFFFF
+            for off in range(16, min(len(payload) - 2, 32), 2):
+                rnti = struct.unpack_from("<H", payload, off)[0]
+                if 0 < rnti < 0xFFFF:
+                    temp_rnti = rnti
+                    break
+
+            evt = RACHEvent(
+                timestamp=pkt.timestamp, tech="NR", msg_stage="Msg2",
+                timing_advance=timing_advance, temp_rnti=temp_rnti,
+                result="RAR Received",
+            )
+            result.rach_events.append(evt)
+
+            if self.verbose:
+                print(f"  [NR RACH Msg2] TA={timing_advance} RNTI=0x{temp_rnti:04X}" if temp_rnti else f"  [NR RACH Msg2] TA={timing_advance}")
+        except (struct.error, IndexError):
+            result.parse_errors += 1
+
+    def _decode_nas_ota(self, pkt: DiagPacket, result: AnalysisResult) -> None:
+        """
+        Decode 0xB802 NR NAS OTA (SA signaling).
+        Extracts Registration Request/Accept/Reject and PDU Session messages.
+        """
+        payload = pkt.payload
+        if len(payload) < 6:
+            return
+
+        try:
+            # NAS OTA layout: direction(1), rsvd(1), nas_msg_type(1), ...
+            direction_byte = payload[0] & 0x01
+            direction = "UL" if direction_byte == 0 else "DL"
+            nas_msg_id = payload[2] if len(payload) > 2 else 0
+
+            # 5GMM message types (TS 24.501)
+            nas_5gmm_types = {
+                0x41: "Registration Request",
+                0x42: "Registration Accept",
+                0x43: "Registration Complete",
+                0x44: "Registration Reject",
+                0x45: "Deregistration Request (UE)",
+                0x46: "Deregistration Accept (UE)",
+                0x47: "Deregistration Request (NW)",
+                0x48: "Deregistration Accept (NW)",
+                0x4C: "Service Request",
+                0x4D: "Service Reject",
+                0x4E: "Service Accept",
+                0x54: "Configuration Update Command",
+                0x55: "Configuration Update Complete",
+                0x56: "Authentication Request",
+                0x57: "Authentication Response",
+                0x58: "Authentication Reject",
+                0x59: "Authentication Failure",
+                0x5D: "Security Mode Command",
+                0x5E: "Security Mode Complete",
+                0x5F: "Security Mode Reject",
+                0x64: "5GMM Status",
+                0x65: "Notification",
+                0x66: "Notification Response",
+                # 5GSM
+                0xC1: "PDU Session Establishment Request",
+                0xC2: "PDU Session Establishment Accept",
+                0xC3: "PDU Session Establishment Reject",
+                0xCA: "PDU Session Modification Request",
+                0xCB: "PDU Session Modification Reject",
+                0xCC: "PDU Session Modification Command",
+                0xD1: "PDU Session Release Request",
+                0xD2: "PDU Session Release Reject",
+                0xD3: "PDU Session Release Command",
+                0xD4: "PDU Session Release Complete",
+            }
+            msg_name = nas_5gmm_types.get(nas_msg_id, f"NR NAS 0x{nas_msg_id:02X}")
+
+            # Extract cause code from reject messages
+            cause_code = None
+            cause_text = ""
+            if "Reject" in msg_name and len(payload) > 3:
+                cause_code = payload[3]
+                cause_text = MM5G_CAUSE_CODES.get(cause_code, f"Cause #{cause_code}")
+
+            event = NASEvent(
+                timestamp=pkt.timestamp,
+                tech="NR",
+                msg_type=msg_name,
+                direction=direction,
+                cause_code=cause_code,
+                cause_text=cause_text,
+            )
+            result.nas_events.append(event)
+
+            if cause_code is not None:
+                result.anomalies.append(
+                    Anomaly(
+                        timestamp=pkt.timestamp,
+                        tech="NR",
+                        category="nas_reject",
+                        severity="critical",
+                        description=f"NR NAS {msg_name}: {cause_text}",
+                    )
+                )
+
+            if self.verbose:
+                print(f"  [NR NAS OTA] {direction} {msg_name}")
+
+        except (struct.error, IndexError):
             result.parse_errors += 1
 
     # NR RRC channel type mapping for v13+ sub-packet format
@@ -1925,8 +2774,43 @@ class NR5GAnalyzer:
                 msg_name = NR_RRC_MSG_TYPES.get(msg_type_id, f"NR_RRC_{msg_type_id}")
 
             details = f"chan={chan_name}" if chan_name else f"chan_type={chan_type}"
-            # Use NR-ARFCN when available (v13+ format)
             earfcn = nr_arfcn
+
+            # Extract cause code and waitTime from PDU for specific messages
+            rrc_cause = ""
+            rrc_wait_time = None
+
+            if msg_name and version >= 13 and len(payload) >= 22:
+                pdu_bytes = payload[20:] if len(payload) > 20 else b""
+
+                if "Reject" in msg_name:
+                    # RRCReject: waitTime is typically the first non-zero byte in PDU (1-16 seconds)
+                    for off in range(min(len(pdu_bytes), 8)):
+                        if 1 <= pdu_bytes[off] <= 16:
+                            rrc_wait_time = pdu_bytes[off]
+                            break
+                    if rrc_wait_time:
+                        if rrc_wait_time < 5:
+                            rrc_cause = RRC_REJECT_REASONS["short_wait"]
+                        elif rrc_wait_time <= 10:
+                            rrc_cause = RRC_REJECT_REASONS["medium_wait"]
+                        else:
+                            rrc_cause = RRC_REJECT_REASONS["long_wait"]
+                    else:
+                        rrc_cause = RRC_REJECT_REASONS["unknown"]
+
+                elif "Release" in msg_name:
+                    # RRC Release: cause in first few bits of PDU
+                    if pdu_bytes:
+                        cause_idx = (pdu_bytes[0] >> 5) & 0x07 if pdu_bytes else 0
+                        rrc_cause = RRC_RELEASE_CAUSES.get(cause_idx, f"cause({cause_idx})")
+
+                elif "Reestablishment" in msg_name and "Request" in msg_name:
+                    # Reestablishment Request: reestablishmentCause
+                    if pdu_bytes:
+                        cause_idx = (pdu_bytes[0] >> 5) & 0x07 if pdu_bytes else 2
+                        rrc_cause = RRC_REESTABLISH_CAUSES.get(cause_idx, f"cause({cause_idx})")
+
             event = RRCEvent(
                 timestamp=pkt.timestamp,
                 tech="NR",
@@ -1936,29 +2820,34 @@ class NR5GAnalyzer:
                 pci=pci,
                 earfcn=earfcn,
                 sfn=sfn,
+                cause=rrc_cause,
+                wait_time=rrc_wait_time,
             )
             result.rrc_events.append(event)
 
             # Flag reestablishments
-            if "Reestablishment" in msg_name:
+            if msg_name and "Reestablishment" in msg_name:
                 sev = "critical" if "Reject" in event.event else "warning"
+                cause_str = f" ({rrc_cause})" if rrc_cause else ""
                 result.anomalies.append(
                     Anomaly(
                         timestamp=event.timestamp,
                         tech="NR",
                         category="rrc_reestablish",
                         severity=sev,
-                        description=f"NR {msg_name}",
+                        description=f"NR {msg_name}{cause_str}",
                     )
                 )
             if msg_name == "RRCReject":
+                wt_str = f", waitTime={rrc_wait_time}s" if rrc_wait_time else ""
+                cause_str = f" ({rrc_cause})" if rrc_cause else ""
                 result.anomalies.append(
                     Anomaly(
                         timestamp=event.timestamp,
                         tech="NR",
                         category="rrc_reject",
                         severity="critical",
-                        description="NR RRC Setup Rejected",
+                        description=f"NR RRC Reject{cause_str}{wt_str}",
                     )
                 )
 
@@ -2268,6 +3157,10 @@ class InsightEngine:
             all_times.append(e.timestamp)
         for t in result.throughput_samples:
             all_times.append(t.timestamp)
+        for p in result.phy_samples:
+            all_times.append(p.timestamp)
+        for p in result.power_samples:
+            all_times.append(p.timestamp)
 
         # Filter out epoch timestamps (unparsed)
         epoch = datetime(1980, 1, 6)
